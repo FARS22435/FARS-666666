@@ -12,9 +12,16 @@
 
   <h1>رفع صورة أو فيديو</h1>
 
-  <input type="file" id="fileInput">
+  <label for="username">اسم المستخدم:</label>
+  <input type="text" id="username" placeholder="أدخل اسم المستخدم" required><br><br>
+
+  <label for="description">وصف:</label>
+  <textarea id="description" placeholder="أدخل وصف الفيديو أو الصورة"></textarea><br><br>
+
+  <input type="file" id="fileInput" required>
   <button onclick="uploadFile()">رفع</button>
 
+  <h2>المحتوى المنشور</h2>
   <div id="mediaPreview"></div>
 
   <script>
@@ -33,18 +40,21 @@
     const database = firebase.database();
     const storage = firebase.storage();
 
+    // رفع الملف إلى Firebase Storage
     function uploadFile() {
       const fileInput = document.getElementById('fileInput');
-      const file = fileInput.files[0];
-      if (!file) {
-        alert("يرجى اختيار ملف");
+      const username = document.getElementById('username').value;
+      const description = document.getElementById('description').value;
+      
+      if (!fileInput.files[0] || !username) {
+        alert("يرجى اختيار ملف وإدخال اسم المستخدم.");
         return;
       }
 
+      const file = fileInput.files[0];
       // إنشاء مرجع لتحميل الملف إلى Firebase Storage
       const storageRef = storage.ref('uploads/' + file.name);
 
-      // تحميل الملف
       const uploadTask = storageRef.put(file);
 
       uploadTask.on('state_changed', (snapshot) => {
@@ -54,22 +64,55 @@
         console.log('Error:', error);
       }, () => {
         uploadTask.snapshot.ref.getDownloadURL().then((downloadURL) => {
-          // نشر الرابط في قاعدة البيانات Firebase
+          // نشر الرابط والمعلومات الأخرى في قاعدة البيانات Firebase
           const mediaRef = database.ref('media').push();
           mediaRef.set({
             url: downloadURL,
-            type: file.type
+            type: file.type,
+            username: username,
+            description: description,
+            timestamp: Date.now()
           });
 
-          // عرض المعاينة
-          const mediaPreview = document.getElementById('mediaPreview');
-          const mediaElement = document.createElement(file.type.startsWith('video') ? 'video' : 'img');
-          mediaElement.src = downloadURL;
-          mediaElement.controls = true;
-          mediaPreview.appendChild(mediaElement);
+          // مسح الحقول بعد النجاح
+          document.getElementById('username').value = '';
+          document.getElementById('description').value = '';
+          fileInput.value = '';
         });
       });
     }
+
+    // استرجاع البيانات من Firebase وعرضها
+    function loadMedia() {
+      const mediaPreview = document.getElementById('mediaPreview');
+      mediaPreview.innerHTML = ''; // مسح المحتوى القديم قبل إضافة الجديد
+
+      const mediaRef = database.ref('media');
+      mediaRef.orderByChild('timestamp').on('child_added', (snapshot) => {
+        const data = snapshot.val();
+        const mediaElement = document.createElement(data.type.startsWith('video') ? 'video' : 'img');
+        const mediaContainer = document.createElement('div');
+        mediaContainer.style.marginBottom = '20px';
+
+        mediaElement.src = data.url;
+        mediaElement.controls = true;
+        mediaElement.width = 300;
+
+        const userLabel = document.createElement('p');
+        userLabel.textContent = `منشور بواسطة: ${data.username}`;
+
+        const descriptionLabel = document.createElement('p');
+        descriptionLabel.textContent = `الوصف: ${data.description}`;
+
+        mediaContainer.appendChild(userLabel);
+        mediaContainer.appendChild(descriptionLabel);
+        mediaContainer.appendChild(mediaElement);
+        mediaPreview.appendChild(mediaContainer);
+      });
+    }
+
+    // تحميل البيانات فور تحميل الصفحة
+    window.onload = loadMedia;
   </script>
 
 </body>
